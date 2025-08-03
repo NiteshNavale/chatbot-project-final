@@ -12,7 +12,7 @@ from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 
 # Correct imports for the refined chain type
-from langchain.chains.Youtubeing import load_qa_chain
+from langchain.chains.youtubeing import load_qa_chain
 from langchain_core.prompts import PromptTemplate
 
 def extract_text_from_file(file):
