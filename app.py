@@ -74,7 +74,7 @@ st.markdown("""
 # --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
-    """Extracts text from various document types with robust, multi-encoding CSV handling."""
+    """Extracts text from various document types with the most robust CSV handling."""
     text = ""
     for doc in docs:
         try:
@@ -99,23 +99,24 @@ def get_docs_text(docs):
                             text += shape.text + "\n"
             elif file_extension == '.txt':
                 text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
-            
-            # --- NEW ROBUST CSV HANDLING ---
+
+            # --- FINAL, MOST ROBUST CSV HANDLING LOGIC ---
             elif file_extension == '.csv':
                 try:
-                    # Try reading with standard UTF-8 encoding
-                    doc.seek(0)
-                    df = pd.read_csv(doc, encoding='utf-8')
-                    text += df.to_string(index=False) + "\n\n"
-                except UnicodeDecodeError:
-                    # If UTF-8 fails, try a more forgiving encoding like latin-1
-                    st.info(f"UTF-8 decoding failed for {doc.name}. Trying 'latin-1' encoding.")
-                    doc.seek(0)
-                    df = pd.read_csv(doc, encoding='latin-1')
-                    text += df.to_string(index=False) + "\n\n"
+                    # MASTER TRY: Attempt to parse as a structured table.
+                    try:
+                        # Attempt 1: Standard UTF-8
+                        doc.seek(0)
+                        df = pd.read_csv(doc, encoding='utf-8')
+                        text += df.to_string(index=False) + "\n\n"
+                    except UnicodeDecodeError:
+                        # Attempt 2: Forgiving Latin-1 for Excel files
+                        doc.seek(0)
+                        df = pd.read_csv(doc, encoding='latin-1')
+                        text += df.to_string(index=False) + "\n\n"
                 except Exception as e:
-                    # Fallback for other pandas errors
-                    st.warning(f"Could not parse CSV {doc.name} with pandas, reading as raw text. Error: {e}")
+                    # FALLBACK: If any structural parsing error occurs, read as raw text.
+                    st.warning(f"Could not parse CSV '{doc.name}' as a structured table due to: {e}. Reading as raw text instead.")
                     doc.seek(0)
                     text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
                     
