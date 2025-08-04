@@ -79,7 +79,9 @@ def get_docs_text(docs):
     for doc in docs:
         try:
             doc.seek(0)
-            file_extension = os.path.splitext(doc.name).lower()
+            # Correctly get the extension from the tuple before calling .lower()
+            file_extension = os.path.splitext(doc.name)[1].lower()
+            
             if file_extension == '.pdf':
                 pdf_reader = PdfReader(doc)
                 for page in pdf_reader.pages:
@@ -172,7 +174,7 @@ def main():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     # Check if history is in the old tuple format and reset if it is
-    if st.session_state.chat_history and not isinstance(st.session_state.chat_history, dict):
+    if st.session_state.chat_history and not isinstance(st.session_state.chat_history[0], dict):
         st.session_state.chat_history = []
         st.rerun()
     if "vector_store" not in st.session_state:
