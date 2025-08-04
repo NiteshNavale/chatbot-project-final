@@ -30,29 +30,41 @@ def get_docs_text(docs):
     """
     text = ""
     for doc in docs:
-        if doc.name.endswith('.pdf'):
-            pdf_reader = PdfReader(doc)
-            for page in pdf_reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text
-        elif doc.name.endswith('.docx'):
-            document = docx.Document(doc)
-            for para in document.paragraphs:
-                text += para.text + "\n"
-        elif doc.name.endswith('.pptx'):
-            prs = Presentation(doc)
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text += shape.text + "\n"
-        elif doc.name.endswith('.txt'):
-            text += doc.getvalue().decode("utf-8") + "\n"
-        elif doc.name.endswith('.csv'):
-            df = pd.read_csv(doc)
-            text += df.to_string() + "\n"
+        try:
+            if doc.name.endswith('.pdf'):
+                pdf_reader = PdfReader(doc)
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text += page_text
+            elif doc.name.endswith('.docx'):
+                document = docx.Document(doc)
+                for para in document.paragraphs:
+                    text += para.text + "\n"
+            elif doc.name.endswith('.pptx'):
+                prs = Presentation(doc)
+                for slide in prs.slides:
+                    for shape in slide.shapes:
+                        if hasattr(shape, "text"):
+                            text += shape.text + "\n"
+            elif doc.name.endswith('.txt'):
+                text += doc.getvalue().decode("utf-8") + "\n"
+            elif doc.name.endswith('.csv'):
+                # First, try to read with standard UTF-8 encoding
+                try:
+                    df = pd.read_csv(doc)
+                    text += df.to_string() + "\n"
+                except UnicodeDecodeError:
+                    # If UTF-8 fails, reset the file pointer and try 'latin-1'
+                    doc.seek(0)
+                    df = pd.read_csv(doc, encoding='latin-1')
+                    text += df.to_string() + "\n"
+        except Exception as e:
+            st.error(f"Error processing file {doc.name}: {e}")
+            # Optionally, you can log the error for debugging
+            # print(f"Could not process file {doc.name}. Error: {e}")
+            continue # Move to the next file
     return text
-
 def get_text_chunks(text):
     """
     Splits the input text into smaller chunks for processing.
