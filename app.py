@@ -31,12 +31,15 @@ def get_docs_text(docs):
     text = ""
     for doc in docs:
         try:
+            # Move the file pointer to the beginning before processing
+            doc.seek(0)
+            
             if doc.name.endswith('.pdf'):
                 pdf_reader = PdfReader(doc)
                 for page in pdf_reader.pages:
                     page_text = page.extract_text()
                     if page_text:
-                        text += page_text
+                        text += page_text + "\n"
             elif doc.name.endswith('.docx'):
                 document = docx.Document(doc)
                 for para in document.paragraphs:
@@ -48,23 +51,20 @@ def get_docs_text(docs):
                         if hasattr(shape, "text"):
                             text += shape.text + "\n"
             elif doc.name.endswith('.txt'):
-                text += doc.getvalue().decode("utf-8") + "\n"
+                text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
             elif doc.name.endswith('.csv'):
-                # First, try to read with standard UTF-8 encoding
-                try:
-                    df = pd.read_csv(doc)
-                    text += df.to_string() + "\n"
-                except UnicodeDecodeError:
-                    # If UTF-8 fails, reset the file pointer and try 'latin-1'
-                    doc.seek(0)
-                    df = pd.read_csv(doc, encoding='latin-1')
-                    text += df.to_string() + "\n"
+                # --- MODIFIED FOR ROBUSTNESS ---
+                # Read the CSV as a plain text file, line by line.
+                # This avoids all pandas parsing errors.
+                text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
+
         except Exception as e:
             st.error(f"Error processing file {doc.name}: {e}")
             # Optionally, you can log the error for debugging
             # print(f"Could not process file {doc.name}. Error: {e}")
             continue # Move to the next file
     return text
+    
 def get_text_chunks(text):
     """
     Splits the input text into smaller chunks for processing.
