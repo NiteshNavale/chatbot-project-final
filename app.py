@@ -74,7 +74,7 @@ st.markdown("""
 # --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
-    """Extracts text from various document types with the most robust CSV handling."""
+    """Extracts text with the most robust and forgiving CSV handling."""
     text = ""
     for doc in docs:
         try:
@@ -100,23 +100,25 @@ def get_docs_text(docs):
             elif file_extension == '.txt':
                 text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
 
-            # --- FINAL, MOST ROBUST CSV HANDLING LOGIC ---
+            # --- DEFINITIVE CSV HANDLING ---
             elif file_extension == '.csv':
                 try:
-                    # MASTER TRY: Attempt to parse as a structured table.
+                    # MASTER TRY: Attempt to parse as a structured table with forgiveness.
+                    # We use the 'python' engine because it fully supports 'on_bad_lines'.
+                    common_kwargs = {'on_bad_lines': 'skip', 'engine': 'python'}
                     try:
                         # Attempt 1: Standard UTF-8
                         doc.seek(0)
-                        df = pd.read_csv(doc, encoding='utf-8')
+                        df = pd.read_csv(doc, encoding='utf-8', **common_kwargs)
                         text += df.to_string(index=False) + "\n\n"
                     except UnicodeDecodeError:
                         # Attempt 2: Forgiving Latin-1 for Excel files
                         doc.seek(0)
-                        df = pd.read_csv(doc, encoding='latin-1')
+                        df = pd.read_csv(doc, encoding='latin-1', **common_kwargs)
                         text += df.to_string(index=False) + "\n\n"
                 except Exception as e:
-                    # FALLBACK: If any structural parsing error occurs, read as raw text.
-                    st.warning(f"Could not parse CSV '{doc.name}' as a structured table due to: {e}. Reading as raw text instead.")
+                    # ULTIMATE FALLBACK: If even the forgiving parser fails, read as raw text.
+                    st.warning(f"Could not parse CSV '{doc.name}' even with forgiving settings. Reading as raw text. Error: {e}")
                     doc.seek(0)
                     text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
                     
@@ -253,4 +255,4 @@ def main():
         handle_user_input(user_question)
 
 if __name__ == "__main__":
-    main()
+    main()```
