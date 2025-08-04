@@ -80,7 +80,6 @@ def get_docs_text(docs):
         try:
             doc.seek(0)
             file_extension = os.path.splitext(doc.name)[1].lower()
-            
             if file_extension == '.pdf':
                 pdf_reader = PdfReader(doc)
                 for page in pdf_reader.pages:
@@ -121,41 +120,28 @@ def get_vector_store(text_chunks):
         return False
 
 def get_conversational_chain():
-    """Initializes the conversational QA chain with specific prompts for table generation."""
-    
+    """Initializes the conversational QA chain."""
     map_prompt_template = """
-    Based on the following context, answer the question.
-    Extract all relevant details.
+    Based on the following context, answer the question. Extract all relevant details.
     Context: {context}
     Question: {question}
     Answer:
     """
     map_prompt = PromptTemplate.from_template(map_prompt_template)
-
     combine_prompt_template = """
     You are an expert assistant. You will be given a question and a set of extracted text from a document.
     Synthesize these into a single, coherent final response.
-    
-    **CRITICAL INSTRUCTION**: If the user's question asks for a comparison, a list of items, a summary of features,
-    or any other structured data, YOUR FINAL ANSWER **MUST** be formatted as a Markdown table.
+    CRITICAL INSTRUCTION: If the user's question asks for a comparison, a list of items, a summary of features,
+    or any other structured data, YOUR FINAL ANSWER MUST be formatted as a Markdown table.
     Use columns and rows appropriately. Do not just list items; structure them in a table.
     For all other questions, provide a clear, well-formatted text answer.
-    
     Question: {question}
     Set of Answers: {summaries}
     Final Answer:
     """
     combine_prompt = PromptTemplate.from_template(combine_prompt_template)
-    
     model = ChatGroq(model_name="llama3-8b-8192", temperature=0.2, api_key=groq_api_key)
-
-    return load_qa_chain(
-        llm=model,
-        chain_type="map_reduce",
-        return_intermediate_steps=False,
-        question_prompt=map_prompt,
-        combine_prompt=combine_prompt
-    )
+    return load_qa_chain(llm=model, chain_type="map_reduce", return_intermediate_steps=False, question_prompt=map_prompt, combine_prompt=combine_prompt)
 
 def handle_user_input(user_question):
     """Processes user questions and displays the bot's response."""
@@ -165,18 +151,13 @@ def handle_user_input(user_question):
 
     with st.spinner("Analyzing documents..."):
         try:
-            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-            docs = st.session_state.vector_store.similarity_search(user_question, k=4)
-            
             chain = get_conversational_chain()
+            docs = st.session_state.vector_store.similarity_search(user_question, k=4)
             response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
             output = response["output_text"]
-
             st.session_state.chat_history.append({"role": "user", "content": user_question})
             st.session_state.chat_history.append({"role": "assistant", "content": output})
-            
             st.rerun()
-
         except Exception as e:
             st.error(f"An error occurred: {e}")
 
@@ -184,34 +165,30 @@ def handle_user_input(user_question):
 
 def main():
     """Main function to run the Streamlit app."""
-
-    # --- HEADER ---
     st.title("🤖 DocuBot: Your Intelligent Document Assistant")
     st.write("Upload your documents, and I'll help you find the answers you need.")
 
-    # --- SESSION STATE INITIALIZATION ---
+    # --- SESSION STATE INITIALIZATION AND VALIDATION ---
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    # ** THE FIX IS HERE **: Check if history is in the old tuple format and reset if it is
+    if st.session_state.chat_history and not isinstance(st.session_state.chat_history[0], dict):
+        st.session_state.chat_history = []
+        st.rerun()
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
 
     # --- SIDEBAR ---
     with st.sidebar:
         st.header("🛠️ Setup Panel")
-
         if not groq_api_key:
             st.error("GROQ_API_KEY not found. Please set it in your environment.")
             st.stop()
         
         st.subheader("1. Upload Your Documents")
-        uploaded_docs = st.file_uploader(
-            "Supports PDF, DOCX, PPTX, TXT, CSV",
-            accept_multiple_files=True,
-            type=['pdf', 'docx', 'pptx', 'txt', 'csv']
-        )
+        uploaded_docs = st.file_uploader("Supports PDF, DOCX, PPTX, TXT, CSV", accept_multiple_files=True, type=['pdf', 'docx', 'pptx', 'txt', 'csv'])
 
         st.subheader("2. Process Documents")
-        st.write("Click below to build the knowledge base.")
         if st.button("Process", use_container_width=True):
             if uploaded_docs:
                 with st.spinner("Reading, chunking, and embedding... please wait."):
@@ -222,33 +199,30 @@ def main():
                         text_chunks = get_text_chunks(raw_text)
                         if get_vector_store(text_chunks):
                             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                            st.session_state.vector_store = FAISS.load_local(
-                                "faiss_index", embeddings, allow_dangerous_deserialization=True
-                            )
+                            st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
                             st.success("Knowledge base is ready!")
-                            st.session_state.chat_history = [] # Reset chat
+                            st.session_state.chat_history = []
+                            st.rerun()
             else:
                 st.warning("Please upload at least one document.")
 
     # --- MAIN CHAT INTERFACE ---
     st.header("💬 Chat with DocuBot")
-
     if not st.session_state.vector_store:
         st.info("Please process your documents in the sidebar to begin the chat.")
 
-    # Display chat history
+    # Display chat history from session state
     for message in st.session_state.chat_history:
         avatar = "👤" if message["role"] == "user" else "🤖"
         with st.chat_message(message["role"], avatar=avatar):
             content = message["content"]
-            # Check if content is a markdown table
             if '|' in content and '---' in content:
                 try:
                     table_data = content[content.find('|'):]
                     df = pd.read_csv(StringIO(table_data), sep='|', header=0, skipinitialspace=True).dropna(axis=1, how='all').iloc[1:].rename(columns=lambda x: x.strip())
                     st.table(df.reset_index(drop=True))
                 except Exception:
-                    st.markdown(content) # Fallback to markdown
+                    st.markdown(content)
             else:
                 st.markdown(content)
     
@@ -257,4 +231,4 @@ def main():
         handle_user_input(user_question)
 
 if __name__ == "__main__":
-    main()
+    main()```
