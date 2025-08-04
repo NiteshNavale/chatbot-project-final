@@ -11,5 +11,7 @@ sentence-transformers
 groq
 python-dotenv
 pypdf
-
-
+streamlit
+python-dotenv
+PyPDF2
+python-pptx
