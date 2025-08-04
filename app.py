@@ -201,14 +201,19 @@ def main():
                     # 2. Split text into chunks
                     text_chunks = get_text_chunks(raw_text)
 
-                    # 3. Create and save vector store
-                    get_vector_store(text_chunks)
+                    # --- ADDED CHECK ---
+                    # 3. Check if text was extracted
+                    if not text_chunks:
+                        st.warning("Could not extract any text from the documents. Please ensure the files are not empty or image-based scans.")
+                    else:
+                        # 4. Create and save vector store
+                        get_vector_store(text_chunks)
 
-                    # 4. Load the vector store into session state
-                    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-                    st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+                        # 5. Load the vector store into session state
+                        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+                        st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+                        st.success("Documents processed successfully! You can now ask questions.")
 
-                st.success("Documents processed successfully! You can now ask questions.")
             else:
                 st.warning("Please upload at least one document file.")
 
