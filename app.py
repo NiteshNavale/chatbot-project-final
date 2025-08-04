@@ -74,12 +74,11 @@ st.markdown("""
 # --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
-    """Extracts text from various document types."""
+    """Extracts text from various document types with improved CSV handling."""
     text = ""
     for doc in docs:
         try:
             doc.seek(0)
-            # Correctly get the extension from the tuple before calling .lower()
             file_extension = os.path.splitext(doc.name)[1].lower()
             
             if file_extension == '.pdf':
@@ -98,8 +97,24 @@ def get_docs_text(docs):
                     for shape in slide.shapes:
                         if hasattr(shape, "text"):
                             text += shape.text + "\n"
-            elif file_extension in ['.txt', '.csv']:
+            elif file_extension == '.txt':
                 text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
+            
+            # --- NEW AND IMPROVED CSV HANDLING ---
+            elif file_extension == '.csv':
+                try:
+                    # Ideal Path: Use pandas to read the CSV into a DataFrame
+                    df = pd.read_csv(doc)
+                    # Convert the DataFrame to a clean string, ready for the LLM
+                    # index=False prevents the extra "Unnamed: 0" column
+                    text += df.to_string(index=False) + "\n\n"
+                except Exception as e:
+                    # Fallback Path: If pandas fails, read as plain text.
+                    # This prevents the app from crashing on malformed CSVs.
+                    st.warning(f"Could not parse CSV {doc.name} with pandas, reading as text. Error: {e}")
+                    doc.seek(0)
+                    text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
+                    
         except Exception as e:
             st.error(f"Error processing file {doc.name}: {e}")
             continue
