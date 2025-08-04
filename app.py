@@ -1,158 +1,202 @@
 import streamlit as st
+from dotenv import load_dotenv
 import os
-import pandas as pd
-from docx import Document
 from PyPDF2 import PdfReader
-
-# Import Groq's chat model and other core langchain components
-from langchain_groq import ChatGroq
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chains import ConversationalRetrievalChain
+from langchain.chains.question_answering import load_qa_chain
+from langchain_groq import ChatGroq
 
-# CORRECT import line for the refined chain type
+# Set up the page configuration for the Streamlit app
+st.set_page_config(page_title="Chat with Documents", layout="wide")
 
-from langchain_core.prompts import PromptTemplate
+# Load environment variables from the .env file
+load_dotenv()
 
-def extract_text_from_file(file):
-    """Extracts text from an uploaded file object."""
-    file_extension = os.path.splitext(file.name)[1].lower()
+def get_pdf_text(pdf_docs):
+    """
+    Extracts text content from a list of uploaded PDF files.
+
+    Args:
+        pdf_docs (list): A list of uploaded PDF file objects.
+
+    Returns:
+        str: The concatenated text from all PDF files.
+    """
     text = ""
-    
-    if file_extension == '.docx':
-        doc = Document(file)
-        for para in doc.paragraphs:
-            text += para.text + "\n"
-    elif file_extension == '.pdf':
-        try:
-            reader = PdfReader(file)
-            for page in reader.pages:
-                text += page.extract_text() or ""
-        except Exception as e:
-            st.error(f"Error reading PDF: {e}")
-            text = ""
-    elif file_extension in ['.xlsx', '.xls', '.csv']:
-        try:
-            df = pd.read_excel(file) if file_extension in ['.xlsx', '.xls'] else pd.read_csv(file)
-            text = df.to_string(index=False)
-        except Exception as e:
-            st.error(f"Error reading Excel/CSV: {e}")
-            text = ""
-    else:
-        st.warning(f"Unsupported file type: {file_extension}")
-        text = ""
-
+    for pdf in pdf_docs:
+        pdf_reader = PdfReader(pdf)
+        for page in pdf_reader.pages:
+            text += page.extract_text()
     return text
 
-def get_vector_store(text):
+def get_text_chunks(text):
     """
-    Splits text into chunks, embeds them using a free Hugging Face model,
-    and stores them in a vector store.
+    Splits the input text into smaller chunks for processing.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        list: A list of text chunks.
     """
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100,
-        length_function=len
-    )
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
     chunks = text_splitter.split_text(text)
-    
-    # Initialize a free Hugging Face embedding model
+    return chunks
+
+def get_vector_store(text_chunks):
+    """
+    Creates and saves a FAISS vector store from text chunks.
+
+    Args:
+        text_chunks (list): A list of text chunks.
+    """
+    # Use a popular open-source embedding model
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     
-    vector_store = FAISS.from_texts(chunks, embeddings)
-    return vector_store
+    # Create the vector store using FAISS
+    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
+    
+    # Save the vector store locally (optional, for persistence)
+    vector_store.save_local("faiss_index")
+    st.session_state.vector_store_created = True
 
-def get_conversation_chain(vector_store):
+
+def get_conversational_chain():
     """
-    Creates a conversational Q&A chain using the Groq chat model
-    and a custom refine chain.
+    Initializes and returns a conversational QA chain using the Groq model.
+
+    Returns:
+        A LangChain conversational chain object.
     """
-    llm = ChatGroq(
-        temperature=0.7,
-        model_name="mixtral-8x7b-32768", 
-        groq_api_key=st.secrets["GROQ_API_KEY"]
+    prompt_template = """
+    Answer the question as detailed as possible from the provided context. Make sure to provide all the details.
+    If the answer is not in the provided context, just say, "The answer is not available in the context".
+    Do not provide a wrong answer.\n\n
+    Context:\n{context}\n
+    Question:\n{question}\n
+
+    Answer:
+    """
+    
+    # Initialize the Groq model
+    model = ChatGroq(
+        model_name="llama3-8b-8192", 
+        temperature=0.3,
+        api_key=os.getenv("GROQ_API_KEY")
     )
-    
-    # Define the prompts for the refine chain
-    question_prompt_template = """
-    Use the following context to answer the question. If you don't know the answer, just say that you don't know, don't try to make up an answer.
-    {context}
 
-    Question: {question}
-    """
-    question_prompt = PromptTemplate.from_template(question_prompt_template)
-
-    refine_prompt_template = """
-    The original question is as follows: {question}
-    We have provided an existing answer: {existing_answer}
-    We have the opportunity to refine the existing answer with some more context below.
-    ------------
-    {context}
-    ------------
-    Given the new context, refine the original answer to better answer the question. If the context isn't useful, return the original answer.
-    """
-    refine_prompt = PromptTemplate.from_template(refine_prompt_template)
-    
-    # Create the refine document chain
-    doc_chain = load_qa_chain(
-        llm,
-        chain_type="refine",
-        question_prompt=question_prompt,
-        refine_prompt=refine_prompt,
+    # Create the QA chain with a custom prompt
+    chain = load_qa_chain(
+        llm=model,
+        chain_type="stuff",
+        prompt=st.session_state.prompt_template_class.from_template(prompt_template)
     )
-    
-    # Create the ConversationalRetrievalChain by passing the components
-    conversation_chain = ConversationalRetrievalChain(
-        retriever=vector_store.as_retriever(),
-        question_generator=llm,
-        combine_docs_chain=doc_chain,
-    )
-    
-    return conversation_chain
+    return chain
 
-def handle_user_input(user_question):
-    """Handles user questions and displays the chatbot's response."""
-    if "conversation" in st.session_state and "chat_history" in st.session_state:
-        response = st.session_state.conversation({'question': user_question, 'chat_history': st.session_state.chat_history})
-        st.session_state.chat_history = response['chat_history']
-        st.write("You:", user_question)
-        st.write("Bot:", response['answer'])
+def user_input(user_question):
+    """
+    Handles user input, queries the vector store, and gets a response from the LLM.
+
+    Args:
+        user_question (str): The question asked by the user.
+    """
+    if "vector_store" not in st.session_state or not st.session_state.vector_store:
+        st.warning("Please upload and process your documents first.")
+        return
+
+    # Use a popular open-source embedding model
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+    
+    # Perform a similarity search in the vector store
+    docs = st.session_state.vector_store.similarity_search(user_question, k=3)
+    
+    # Get the conversational chain
+    chain = get_conversational_chain()
+    
+    # Get the response from the chain
+    response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
+    
+    # Add the current interaction to the chat history
+    st.session_state.chat_history.append(("You", user_question))
+    st.session_state.chat_history.append(("Bot", response["output_text"]))
 
 def main():
-    st.set_page_config(page_title="Document Chatbot", page_icon=":books:")
-    st.title("Chat with Your Documents")
-
-    if "conversation" not in st.session_state:
-        st.session_state.conversation = None
+    """
+    The main function that runs the Streamlit application.
+    """
+    # Initialize session state variables if they don't exist
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-
-
-    with st.sidebar:
-        st.subheader("Upload your documents")
-        uploaded_file = st.file_uploader(
-            "Upload files and click 'Process'",
-            type=["pdf", "docx", "xlsx", "csv"],
-            accept_multiple_files=False
-        )
-        if st.button("Process Document"):
-            if uploaded_file:
-                with st.spinner("Processing..."):
-                    raw_text = extract_text_from_file(uploaded_file)
-                    if raw_text:
-                        vector_store = get_vector_store(raw_text)
-                        st.session_state.conversation = get_conversation_chain(vector_store)
-                        st.success("Document processed successfully!")
-                    else:
-                        st.error("Failed to process the document.")
-            else:
-                st.error("Please upload a document first.")
+    if "vector_store" not in st.session_state:
+        st.session_state.vector_store = None
+    if "vector_store_created" not in st.session_state:
+        st.session_state.vector_store_created = False
     
-    st.subheader("Ask a question about your document:")
-    user_question = st.text_input("Your question:")
-    if user_question:
-        handle_user_input(user_question)
+    # Needed for the prompt template in the chain
+    from langchain.prompts import PromptTemplate
+    st.session_state.prompt_template_class = PromptTemplate
 
-if __name__ == '__main__':
+    # App Title
+    st.title("📄 Chat with Your Documents using Groq")
+    st.write("Upload your PDF documents, and ask any questions about their content!")
+
+    # Sidebar for document upload and processing
+    with st.sidebar:
+        st.header("Settings")
+        
+        # Check if API key is available
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            st.error("GROQ_API_KEY not found. Please set it in your .env file.")
+            st.stop()
+        else:
+            st.success("Groq API Key loaded successfully.")
+
+        st.subheader("Your Documents")
+        pdf_docs = st.file_uploader(
+            "Upload your PDF files here and click on 'Process'",
+            accept_multiple_files=True,
+            type="pdf"
+        )
+        
+        if st.button("Process Documents"):
+            if pdf_docs:
+                with st.spinner("Processing your documents... This may take a moment."):
+                    # 1. Extract text from PDFs
+                    raw_text = get_pdf_text(pdf_docs)
+                    
+                    # 2. Split text into chunks
+                    text_chunks = get_text_chunks(raw_text)
+                    
+                    # 3. Create and save vector store
+                    get_vector_store(text_chunks)
+                    
+                    # 4. Load the vector store into session state
+                    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+                    st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
+
+                st.success("Documents processed successfully! You can now ask questions.")
+            else:
+                st.warning("Please upload at least one PDF file.")
+
+    # Main chat interface
+    st.header("Chatbot")
+
+    # Display chat history
+    chat_container = st.container()
+    with chat_container:
+        for role, message in st.session_state.chat_history:
+            with st.chat_message(role.lower()):
+                st.write(message)
+
+    # Handle user input at the bottom
+    if user_question := st.chat_input("Ask a question about your documents..."):
+        user_input(user_question)
+        
+        # Rerun to display the latest chat messages
+        st.rerun()
+
+if __name__ == "__main__":
     main()
