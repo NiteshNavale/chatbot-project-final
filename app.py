@@ -79,7 +79,7 @@ def get_docs_text(docs):
     for doc in docs:
         try:
             doc.seek(0)
-            file_extension = os.path.splitext(doc.name)[1].lower()
+            file_extension = os.path.splitext(doc.name).lower()
             if file_extension == '.pdf':
                 pdf_reader = PdfReader(doc)
                 for page in pdf_reader.pages:
@@ -145,7 +145,7 @@ def get_conversational_chain():
 
 def handle_user_input(user_question):
     """Processes user questions and displays the bot's response."""
-    if st.session_state.vector_store is None:
+    if "vector_store" not in st.session_state or st.session_state.vector_store is None:
         st.warning("Please upload and process documents before asking a question.")
         return
 
@@ -171,8 +171,8 @@ def main():
     # --- SESSION STATE INITIALIZATION AND VALIDATION ---
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    # ** THE FIX IS HERE **: Check if history is in the old tuple format and reset if it is
-    if st.session_state.chat_history and not isinstance(st.session_state.chat_history[0], dict):
+    # Check if history is in the old tuple format and reset if it is
+    if st.session_state.chat_history and not isinstance(st.session_state.chat_history, dict):
         st.session_state.chat_history = []
         st.rerun()
     if "vector_store" not in st.session_state:
@@ -208,7 +208,7 @@ def main():
 
     # --- MAIN CHAT INTERFACE ---
     st.header("💬 Chat with DocuBot")
-    if not st.session_state.vector_store:
+    if "vector_store" not in st.session_state or st.session_state.vector_store is None:
         st.info("Please process your documents in the sidebar to begin the chat.")
 
     # Display chat history from session state
@@ -231,4 +231,4 @@ def main():
         handle_user_input(user_question)
 
 if __name__ == "__main__":
-    main()```
+    main()
