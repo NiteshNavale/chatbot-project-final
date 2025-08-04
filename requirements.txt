@@ -8,3 +8,8 @@ PyPDF2
 pandas
 faiss-cpu
 sentence-transformers
+groq
+python-dotenv
+pypdf
+
+
