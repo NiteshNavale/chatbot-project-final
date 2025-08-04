@@ -79,7 +79,8 @@ def get_docs_text(docs):
     for doc in docs:
         try:
             doc.seek(0)
-            file_extension = os.path.splitext(doc.name).lower()
+            # ** THIS IS THE CORRECTED LINE **
+            file_extension = os.path.splitext(doc.name)[1].lower()
             
             if file_extension == '.pdf':
                 pdf_reader = PdfReader(doc)
@@ -104,7 +105,6 @@ def get_docs_text(docs):
             elif file_extension == '.csv':
                 try:
                     # MASTER TRY: Attempt to parse as a structured table with forgiveness.
-                    # We use the 'python' engine because it fully supports 'on_bad_lines'.
                     common_kwargs = {'on_bad_lines': 'skip', 'engine': 'python'}
                     try:
                         # Attempt 1: Standard UTF-8
@@ -196,7 +196,7 @@ def main():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     # Check if history is in the old tuple format and reset if it is
-    if st.session_state.chat_history and not isinstance(st.session_state.chat_history, dict):
+    if st.session_state.chat_history and not isinstance(st.session_state.chat_history[0], dict):
         st.session_state.chat_history = []
         st.rerun()
     if "vector_store" not in st.session_state:
