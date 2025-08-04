@@ -101,38 +101,58 @@ def get_vector_store(text_chunks):
 def get_conversational_chain():
     """
     Initializes and returns a conversational QA chain using the Groq model.
-
-    Returns:
-        A LangChain conversational chain object.
+    This function is updated to use the 'map_reduce' chain type correctly.
     """
-    prompt_template = """
-    Answer the question as detailed as possible from the provided context. Make sure to provide all the details.
-    If the answer is not in the provided context, just say, "The answer is not available in the context".
-    Do not provide a wrong answer.\n\n
-    Context:\n{context}\n
-    Question:\n{question}\n
+    
+    # Prompt for the MAP step: processes each chunk of text
+    map_prompt_template = """
+    Based on the following context, answer the question.
+    Provide a detailed and comprehensive answer extracting all relevant information from the text.
+    If the context does not contain the answer, state that the information is not available.
+    
+    Context:
+    {context}
+    
+    Question:
+    {question}
 
     Answer:
     """
+    map_prompt = PromptTemplate.from_template(map_prompt_template)
 
+    # Prompt for the REDUCE step: combines the answers from the map step
+    combine_prompt_template = """
+    You are given a question and a set of answers from different sections of a document.
+    Your task is to synthesize these answers into a single, final, and coherent response.
+    Do not add any information that is not present in the provided answers.
+    If the answers indicate that the information is not available, then state that the answer is not available in the context.
+    
+    Question:
+    {question}
+    
+    Set of Answers:
+    {summaries}
+    
+    Final Answer:
+    """
+    combine_prompt = PromptTemplate.from_template(combine_prompt_template)
+    
     # Initialize the Groq model
     model = ChatGroq(
-        model_name="llama3-8b-8192",
+        model_name="llama3-8b-8192", 
         temperature=0.3,
         api_key=os.getenv("GROQ_API_KEY")
     )
 
-    # Create the QA chain with a custom prompt and a more robust chain type
-    prompt = PromptTemplate.from_template(prompt_template)
-    
-    # Use "map_reduce" to handle larger documents that might exceed the context window
+    # Create the QA chain with the separate map and combine prompts
     chain = load_qa_chain(
         llm=model,
-        chain_type="map_reduce", # Changed from "stuff"
+        chain_type="map_reduce",
         return_intermediate_steps=False,
-        question_prompt=prompt, # You can customize map and combine prompts if needed
-        combine_prompt=prompt   # For simplicity, we use the same prompt here
+        question_prompt=map_prompt,  # Renamed from map_prompt for clarity in older versions
+        combine_prompt=combine_prompt
     )
+    
     return chain
 
 def user_input(user_question):
