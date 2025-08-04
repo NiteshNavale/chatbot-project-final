@@ -75,7 +75,8 @@ def get_text_chunks(text):
     Returns:
         list: A list of text chunks.
     """
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000, chunk_overlap=1000)
+    # Use a smaller chunk size to avoid exceeding the model's context window
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     chunks = text_splitter.split_text(text)
     return chunks
 
@@ -121,12 +122,16 @@ def get_conversational_chain():
         api_key=os.getenv("GROQ_API_KEY")
     )
 
-    # Create the QA chain with a custom prompt
+    # Create the QA chain with a custom prompt and a more robust chain type
     prompt = PromptTemplate.from_template(prompt_template)
+    
+    # Use "map_reduce" to handle larger documents that might exceed the context window
     chain = load_qa_chain(
         llm=model,
-        chain_type="stuff",
-        prompt=prompt
+        chain_type="map_reduce", # Changed from "stuff"
+        return_intermediate_steps=False,
+        question_prompt=prompt, # You can customize map and combine prompts if needed
+        combine_prompt=prompt   # For simplicity, we use the same prompt here
     )
     return chain
 
