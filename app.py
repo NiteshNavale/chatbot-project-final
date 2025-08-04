@@ -139,7 +139,7 @@ def main():
     st.session_state.prompt_template_class = PromptTemplate
 
     # App Title
-    st.title("📄 Chat with Your Documents using Groq")
+    st.title("📄 Chat with Your Documents using Groq. Developed by Nitesh")
     st.write("Upload your PDF documents, and ask any questions about their content!")
 
     # Sidebar for document upload and processing
