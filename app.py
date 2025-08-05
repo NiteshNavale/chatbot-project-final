@@ -189,7 +189,7 @@ def handle_user_input(user_question):
 
 def main():
     """Main function to run the Streamlit app."""
-    st.title("🤖 DocuBot: Your Intelligent Document Assistant")
+    st.title("🤖 Your Intelligent Document Assistant")
     st.write("Upload your documents, and I'll help you find the answers you need.")
 
     # --- SESSION STATE INITIALIZATION AND VALIDATION ---
