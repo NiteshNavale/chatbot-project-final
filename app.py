@@ -32,46 +32,79 @@ st.markdown("""
         background-color: #F0F2F6;
         font-family: 'Helvetica Neue', sans-serif;
     }
+
     /* Sidebar styling */
     .st-emotion-cache-16txtl3 {
         background-color: #FFFFFF;
         border-right: 2px solid #E0E0E0;
     }
-    /* Chat message containers */
+
+    /* --- WhatsApp-like Chat Styling --- */
+
+    /* Chat container to allow for flexbox alignment */
+    [data-testid="stChatMessages"] {
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* General chat message container styling */
     [data-testid="stChatMessage"] {
-        border-radius: 12px;
-        padding: 1rem 1.5rem;
+        border-radius: 20px;
+        padding: 12px 18px;
         margin-bottom: 1rem;
-        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.1);
+        box-shadow: 0 2px 5px 0 rgba(0,0,0,0.1);
         border: 1px solid #E0E0E0;
+        max-width: 65%; /* Max width for messages */
+        width: fit-content; /* Bubble-like width */
     }
-    /* User message styling */
+
+    /* User message styling (Right-aligned, WhatsApp green) */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-user"]) {
-        background-color: #E1F5FA; /* Light blue */
+        background-color: #DCF8C6; /* WhatsApp user message green */
+        align-self: flex-end; /* Align to the right */
+        margin-left: auto;
     }
-    /* Bot message styling */
+
+    /* Bot message styling (Left-aligned, white) */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-assistant"]) {
         background-color: #FFFFFF; /* White */
+        align-self: flex-start; /* Align to the left */
+        margin-right: auto;
     }
+    
+    /* Remove the avatar icons */
+    [data-testid="stAvatarIcon-user"], [data-testid="stAvatarIcon-assistant"] {
+        display: none;
+    }
+    
     /* Table styling */
     .stDataFrame, .stTable {
         border-radius: 8px;
         box-shadow: 0 2px 4px 0 rgba(0,0,0,0.1);
         border: 1px solid #E0E0E0;
     }
+
     /* Title styling */
     h1 {
         color: #1E1E1E;
         font-weight: 600;
+        text-align: center;
     }
+
     /* Subheader styling */
     h2, h3 {
         color: #333333;
     }
+    
+    /* Center the chat header */
+    .st-emotion-cache-1yyk08v {
+        text-align: center;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- CORE FUNCTIONS ---
+# --- CORE FUNCTIONS (No changes needed here) ---
 
 def get_docs_text(docs):
     """Extracts text with robust CSV handling."""
@@ -167,7 +200,7 @@ def get_conversational_chain():
 
 def main():
     """Main function to run the Streamlit app."""
-    st.title("🤖 Your Intelligent Document Assistant")
+    st.title("🤖 NitBot: Your Intelligent Document Assistant")
     st.write("Upload your documents, and I'll help you find the answers you need.")
 
     # --- SESSION STATE INITIALIZATION ---
@@ -200,7 +233,7 @@ def main():
                             st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
                             st.session_state.chat_history = [] # Clear history on new processing
                             st.success("Knowledge base is ready! You can now ask questions.")
-                            st.rerun() # Rerun to clear the "Process" button state and reflect the new status
+                            st.rerun() 
             else:
                 st.warning("Please upload at least one document.")
 
@@ -211,7 +244,7 @@ def main():
 
     # Display chat history from session state
     for message in st.session_state.chat_history:
-        with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "🤖"):
+        with st.chat_message(message["role"]):
             st.markdown(message["content"])
     
     # Handle user input and streaming response
@@ -220,30 +253,26 @@ def main():
             st.warning("Please upload and process documents before asking a question.")
             st.stop()
         
-        # Display user message and add to history
-        st.chat_message("user", avatar="👤").markdown(user_question)
+        # Add user message to history and display it
         st.session_state.chat_history.append({"role": "user", "content": user_question})
+        with st.chat_message("user"):
+            st.markdown(user_question)
 
         # Start generating and streaming the assistant's response
-        with st.chat_message("assistant", avatar="🤖"):
+        with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 try:
-                    # Retrieve relevant context
                     retriever = st.session_state.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
                     docs = retriever.invoke(user_question)
                     context = "\n\n---\n\n".join([doc.page_content for doc in docs])
                     
-                    # Get the streaming chain
                     chain = get_conversational_chain()
                     
-                    # Use st.write_stream to display the streamed response
-                    # It automatically handles the generator and renders the output
                     full_response = st.write_stream(chain.stream({
                         "context": context,
                         "question": user_question
                     }))
                     
-                    # Add the complete assistant response to chat history
                     st.session_state.chat_history.append({"role": "assistant", "content": full_response})
 
                 except Exception as e:
@@ -253,4 +282,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main()```
