@@ -61,11 +61,7 @@ st.markdown("""
         background-color: #DCF8C6; /* WhatsApp user message green */
         align-self: flex-end; /* Align to the right */
         margin-left: auto;
-        
-        /* THIS IS THE KEY: Makes the bubble width fit the content */
         width: fit-content; 
-        
-        /* THIS IS THE SAFEGUARD: Prevents the bubble from being too wide on large screens */
         max-width: 65%;
     }
 
@@ -74,11 +70,11 @@ st.markdown("""
         background-color: #FFFFFF; /* White */
         align-self: flex-start; /* Align to the left */
         margin-right: auto;
-        width: 100%; /* Take full available width for tables and long text */
+        width: 100%; 
         max-width: 100%; 
     }
     
-    /* Remove the avatar icons for a cleaner look */
+    /* Remove the avatar icons */
     [data-testid="stAvatarIcon-user"], [data-testid="stAvatarIcon-assistant"] {
         display: none;
     }
@@ -110,7 +106,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CORE FUNCTIONS (No changes needed here) ---
+# --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
     """Extracts text with robust CSV handling."""
@@ -269,7 +265,10 @@ def main():
             with st.spinner("Thinking..."):
                 try:
                     retriever = st.session_state.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-                    docs = retriever.invoke(user_query)
+                    
+                    # *** THIS IS THE CORRECTED LINE ***
+                    docs = retriever.invoke(user_question)
+                    
                     context = "\n\n---\n\n".join([doc.page_content for doc in docs])
                     
                     chain = get_conversational_chain()
