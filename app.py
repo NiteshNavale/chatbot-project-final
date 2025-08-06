@@ -104,7 +104,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CORE FUNCTIONS (No changes needed here) ---
+# --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
     """Extracts text with robust CSV handling."""
@@ -280,6 +280,5 @@ def main():
                     st.error(error_message)
                     st.session_state.chat_history.append({"role": "assistant", "content": error_message})
 
-
 if __name__ == "__main__":
-    main()```
+    main()
