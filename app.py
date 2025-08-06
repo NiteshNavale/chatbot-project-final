@@ -15,7 +15,7 @@ from langchain_core.output_parsers import StrOutputParser
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-    page_title="DocuBot",
+    page_title="NitBot",
     page_icon="🤖",
     layout="wide"
 )
@@ -205,7 +205,7 @@ def main():
                 st.warning("Please upload at least one document.")
 
     # --- MAIN CHAT INTERFACE ---
-    st.header("💬 Chat with DocuBot")
+    st.header("💬 Chat with NitBot")
     if st.session_state.vector_store is None:
         st.info("Please process your documents in the sidebar to begin the chat.")
 
