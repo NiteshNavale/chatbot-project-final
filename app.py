@@ -47,7 +47,7 @@ st.markdown("""
     }
     /* User message styling */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-user"]) {
-        background-color: #E1F5FE; /* Light blue */
+        background-color: #E1F5FA; /* Light blue */
     }
     /* Bot message styling */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-assistant"]) {
