@@ -47,7 +47,7 @@ st.markdown("""
         flex-direction: column;
     }
 
-    /* General chat message container styling - this will be inherited */
+    /* General chat message container styling */
     [data-testid="stChatMessage"] {
         border-radius: 20px;
         padding: 12px 18px;
@@ -56,13 +56,17 @@ st.markdown("""
         border: 1px solid #E0E0E0;
     }
 
-    /* User message styling (Right-aligned, bubble-like) */
+    /* User message styling (Right-aligned, DYNAMIC/BUBBLE-LIKE WIDTH) */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-user"]) {
         background-color: #DCF8C6; /* WhatsApp user message green */
         align-self: flex-end; /* Align to the right */
         margin-left: auto;
+        
+        /* THIS IS THE KEY: Makes the bubble width fit the content */
+        width: fit-content; 
+        
+        /* THIS IS THE SAFEGUARD: Prevents the bubble from being too wide on large screens */
         max-width: 65%;
-        width: fit-content;
     }
 
     /* Bot message styling (Left-aligned, FULL-WIDTH) */
@@ -70,8 +74,8 @@ st.markdown("""
         background-color: #FFFFFF; /* White */
         align-self: flex-start; /* Align to the left */
         margin-right: auto;
-        width: 100%; /* Take full available width */
-        max-width: 100%; /* Override the general max-width */
+        width: 100%; /* Take full available width for tables and long text */
+        max-width: 100%; 
     }
     
     /* Remove the avatar icons for a cleaner look */
@@ -265,7 +269,7 @@ def main():
             with st.spinner("Thinking..."):
                 try:
                     retriever = st.session_state.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-                    docs = retriever.invoke(user_question)
+                    docs = retriever.invoke(user_query)
                     context = "\n\n---\n\n".join([doc.page_content for doc in docs])
                     
                     chain = get_conversational_chain()
