@@ -47,32 +47,34 @@ st.markdown("""
         flex-direction: column;
     }
 
-    /* General chat message container styling */
+    /* General chat message container styling - this will be inherited */
     [data-testid="stChatMessage"] {
         border-radius: 20px;
         padding: 12px 18px;
         margin-bottom: 1rem;
         box-shadow: 0 2px 5px 0 rgba(0,0,0,0.1);
         border: 1px solid #E0E0E0;
-        max-width: 65%; /* Max width for messages */
-        width: fit-content; /* Bubble-like width */
     }
 
-    /* User message styling (Right-aligned, WhatsApp green) */
+    /* User message styling (Right-aligned, bubble-like) */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-user"]) {
         background-color: #DCF8C6; /* WhatsApp user message green */
         align-self: flex-end; /* Align to the right */
         margin-left: auto;
+        max-width: 65%;
+        width: fit-content;
     }
 
-    /* Bot message styling (Left-aligned, white) */
+    /* Bot message styling (Left-aligned, FULL-WIDTH) */
     [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-assistant"]) {
         background-color: #FFFFFF; /* White */
         align-self: flex-start; /* Align to the left */
         margin-right: auto;
+        width: 100%; /* Take full available width */
+        max-width: 100%; /* Override the general max-width */
     }
     
-    /* Remove the avatar icons */
+    /* Remove the avatar icons for a cleaner look */
     [data-testid="stAvatarIcon-user"], [data-testid="stAvatarIcon-assistant"] {
         display: none;
     }
@@ -104,7 +106,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- CORE FUNCTIONS ---
+# --- CORE FUNCTIONS (No changes needed here) ---
 
 def get_docs_text(docs):
     """Extracts text with robust CSV handling."""
