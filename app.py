@@ -9,9 +9,9 @@ from pptx import Presentation
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.chains.question_answering import load_qa_chain
 from langchain_groq import ChatGroq
-from langchain.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -38,7 +38,7 @@ st.markdown("""
         border-right: 2px solid #E0E0E0;
     }
     /* Chat message containers */
-    [data-testid="chat-message-container"] {
+    [data-testid="stChatMessage"] {
         border-radius: 12px;
         padding: 1rem 1.5rem;
         margin-bottom: 1rem;
@@ -46,11 +46,11 @@ st.markdown("""
         border: 1px solid #E0E0E0;
     }
     /* User message styling */
-    [data-testid="chat-message-container-user"] {
+    [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-user"]) {
         background-color: #E1F5FE; /* Light blue */
     }
     /* Bot message styling */
-    [data-testid="chat-message-container-assistant"] {
+    [data-testid="stChatMessage"]:has([data-testid="stAvatarIcon-assistant"]) {
         background-color: #FFFFFF; /* White */
     }
     /* Table styling */
@@ -74,12 +74,11 @@ st.markdown("""
 # --- CORE FUNCTIONS ---
 
 def get_docs_text(docs):
-    """Extracts text with the most robust and forgiving CSV handling."""
+    """Extracts text with robust CSV handling."""
     text = ""
     for doc in docs:
         try:
             doc.seek(0)
-            # ** THIS IS THE CORRECTED LINE **
             file_extension = os.path.splitext(doc.name)[1].lower()
             
             if file_extension == '.pdf':
@@ -101,24 +100,19 @@ def get_docs_text(docs):
             elif file_extension == '.txt':
                 text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
 
-            # --- DEFINITIVE CSV HANDLING ---
             elif file_extension == '.csv':
                 try:
-                    # MASTER TRY: Attempt to parse as a structured table with forgiveness.
                     common_kwargs = {'on_bad_lines': 'skip', 'engine': 'python'}
                     try:
-                        # Attempt 1: Standard UTF-8
                         doc.seek(0)
                         df = pd.read_csv(doc, encoding='utf-8', **common_kwargs)
                         text += df.to_string(index=False) + "\n\n"
                     except UnicodeDecodeError:
-                        # Attempt 2: Forgiving Latin-1 for Excel files
                         doc.seek(0)
                         df = pd.read_csv(doc, encoding='latin-1', **common_kwargs)
                         text += df.to_string(index=False) + "\n\n"
                 except Exception as e:
-                    # ULTIMATE FALLBACK: If even the forgiving parser fails, read as raw text.
-                    st.warning(f"Could not parse CSV '{doc.name}' even with forgiving settings. Reading as raw text. Error: {e}")
+                    st.warning(f"Could not parse CSV '{doc.name}' as a table. Reading as raw text. Error: {e}")
                     doc.seek(0)
                     text += doc.getvalue().decode("utf-8", errors='ignore') + "\n"
                     
@@ -144,46 +138,30 @@ def get_vector_store(text_chunks):
         return False
 
 def get_conversational_chain():
-    """Initializes the conversational QA chain."""
-    map_prompt_template = """
-    Based on the following context, answer the question. Extract all relevant details.
-    Context: {context}
-    Question: {question}
-    Answer:
-    """
-    map_prompt = PromptTemplate.from_template(map_prompt_template)
-    combine_prompt_template = """
-    You are an expert assistant. You will be given a question and a set of extracted text from a document.
-    Synthesize these into a single, coherent final response.
+    """Initializes a streaming conversational chain using LCEL."""
+    prompt_template = """
+    You are an expert assistant. You will be given a question and a set of context extracted from a document.
+    Synthesize this information into a single, coherent final response. Your goal is to be as helpful as possible.
+    Base your answer ONLY on the context provided.
+
     CRITICAL INSTRUCTION: If the user's question asks for a comparison, a list of items, a summary of features,
-    or any other structured data, YOUR FINAL ANSWER MUST be formatted as a Markdown table.
+    or any other structured data that would benefit from a tabular format, YOUR FINAL ANSWER MUST be formatted as a Markdown table.
     Use columns and rows appropriately. Do not just list items; structure them in a table.
     For all other questions, provide a clear, well-formatted text answer.
-    Question: {question}
-    Set of Answers: {summaries}
+
+    CONTEXT:
+    {context}
+    
+    QUESTION:
+    {question}
+
     Final Answer:
     """
-    combine_prompt = PromptTemplate.from_template(combine_prompt_template)
     model = ChatGroq(model_name="llama3-8b-8192", temperature=0.2, api_key=groq_api_key)
-    return load_qa_chain(llm=model, chain_type="map_reduce", return_intermediate_steps=False, question_prompt=map_prompt, combine_prompt=combine_prompt)
-
-def handle_user_input(user_question):
-    """Processes user questions and displays the bot's response."""
-    if "vector_store" not in st.session_state or st.session_state.vector_store is None:
-        st.warning("Please upload and process documents before asking a question.")
-        return
-
-    with st.spinner("Analyzing documents..."):
-        try:
-            chain = get_conversational_chain()
-            docs = st.session_state.vector_store.similarity_search(user_question, k=4)
-            response = chain({"input_documents": docs, "question": user_question}, return_only_outputs=True)
-            output = response["output_text"]
-            st.session_state.chat_history.append({"role": "user", "content": user_question})
-            st.session_state.chat_history.append({"role": "assistant", "content": output})
-            st.rerun()
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+    prompt = PromptTemplate.from_template(prompt_template)
+    
+    # Create a streaming chain using LangChain Expression Language (LCEL)
+    return prompt | model | StrOutputParser()
 
 # --- MAIN APP LAYOUT ---
 
@@ -192,13 +170,9 @@ def main():
     st.title("🤖 Your Intelligent Document Assistant")
     st.write("Upload your documents, and I'll help you find the answers you need.")
 
-    # --- SESSION STATE INITIALIZATION AND VALIDATION ---
+    # --- SESSION STATE INITIALIZATION ---
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    # Check if history is in the old tuple format and reset if it is
-    if st.session_state.chat_history and not isinstance(st.session_state.chat_history[0], dict):
-        st.session_state.chat_history = []
-        st.rerun()
     if "vector_store" not in st.session_state:
         st.session_state.vector_store = None
 
@@ -218,41 +192,65 @@ def main():
                 with st.spinner("Reading, chunking, and embedding... please wait."):
                     raw_text = get_docs_text(uploaded_docs)
                     if not raw_text.strip():
-                        st.warning("No text extracted. Check document content.")
+                        st.warning("No text extracted. Check document content or format.")
                     else:
                         text_chunks = get_text_chunks(raw_text)
                         if get_vector_store(text_chunks):
                             embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
                             st.session_state.vector_store = FAISS.load_local("faiss_index", embeddings, allow_dangerous_deserialization=True)
-                            st.success("Knowledge base is ready!")
-                            st.session_state.chat_history = []
-                            st.rerun()
+                            st.session_state.chat_history = [] # Clear history on new processing
+                            st.success("Knowledge base is ready! You can now ask questions.")
+                            st.rerun() # Rerun to clear the "Process" button state and reflect the new status
             else:
                 st.warning("Please upload at least one document.")
 
     # --- MAIN CHAT INTERFACE ---
     st.header("💬 Chat with DocuBot")
-    if "vector_store" not in st.session_state or st.session_state.vector_store is None:
+    if st.session_state.vector_store is None:
         st.info("Please process your documents in the sidebar to begin the chat.")
 
     # Display chat history from session state
     for message in st.session_state.chat_history:
-        avatar = "👤" if message["role"] == "user" else "🤖"
-        with st.chat_message(message["role"], avatar=avatar):
-            content = message["content"]
-            if '|' in content and '---' in content:
-                try:
-                    table_data = content[content.find('|'):]
-                    df = pd.read_csv(StringIO(table_data), sep='|', header=0, skipinitialspace=True).dropna(axis=1, how='all').iloc[1:].rename(columns=lambda x: x.strip())
-                    st.table(df.reset_index(drop=True))
-                except Exception:
-                    st.markdown(content)
-            else:
-                st.markdown(content)
+        with st.chat_message(message["role"], avatar="👤" if message["role"] == "user" else "🤖"):
+            st.markdown(message["content"])
     
-    # Handle user input
-    if user_question := st.chat_input("Ask a question about the content of your documents..."):
-        handle_user_input(user_question)
+    # Handle user input and streaming response
+    if user_question := st.chat_input("Ask a question about your documents..."):
+        if st.session_state.vector_store is None:
+            st.warning("Please upload and process documents before asking a question.")
+            st.stop()
+        
+        # Display user message and add to history
+        st.chat_message("user", avatar="👤").markdown(user_question)
+        st.session_state.chat_history.append({"role": "user", "content": user_question})
+
+        # Start generating and streaming the assistant's response
+        with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Thinking..."):
+                try:
+                    # Retrieve relevant context
+                    retriever = st.session_state.vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
+                    docs = retriever.invoke(user_question)
+                    context = "\n\n---\n\n".join([doc.page_content for doc in docs])
+                    
+                    # Get the streaming chain
+                    chain = get_conversational_chain()
+                    
+                    # Use st.write_stream to display the streamed response
+                    # It automatically handles the generator and renders the output
+                    full_response = st.write_stream(chain.stream({
+                        "context": context,
+                        "question": user_question
+                    }))
+                    
+                    # Add the complete assistant response to chat history
+                    st.session_state.chat_history.append({"role": "assistant", "content": full_response})
+
+                except Exception as e:
+                    error_message = f"An error occurred: {e}"
+                    st.error(error_message)
+                    st.session_state.chat_history.append({"role": "assistant", "content": error_message})
+
 
 if __name__ == "__main__":
     main()
